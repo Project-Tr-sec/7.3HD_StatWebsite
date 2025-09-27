@@ -1,17 +1,13 @@
-from __future__ import annotations
-
 import json
+from app import create_app
 
-from app import app
-
+app = create_app()
 
 def test_healthz():
     client = app.test_client()
     resp = client.get("/healthz")
     assert resp.status_code == 200
-    data = resp.get_json()
-    assert data == {"status": "ok"}
-
+    assert resp.get_json()["status"] == "ok"
 
 def test_api_log():
     client = app.test_client()

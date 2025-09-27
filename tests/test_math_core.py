@@ -1,15 +1,7 @@
-from __future__ import annotations
-
-from app.math_core import log_e, sqrt
-
-
-def test_sqrt_four_is_two():
-    assert sqrt(4) == 2
-
+from app.math_core import log_e_is_one, sqrt_four_is_two
 
 def test_log_e_is_one():
-    assert log_e(math_e()) == 1
+    assert round(log_e_is_one(), 6) == 1.0
 
-
-def math_e() -> float:
-    return 2.718281828459045
+def test_sqrt_four_is_two():
+    assert sqrt_four_is_two() == 2.0

@@ -1,15 +1,37 @@
 {% extends "base.html" %}
+{% block title %}Home · Stat Website{% endblock %}
+
 {% block content %}
-  <div class="grid grid-2">
-    <div class="card">
-      <h2>Basic Statistics</h2>
-      <p class="muted">Quick calculator for √x, ln(x), mean, variance.</p>
-      <a class="btn" href="{{ url_for('main.basic_get') }}">Open</a>
-    </div>
-    <div class="card">
-      <h2>Data Study → Model Suggestions</h2>
-      <p class="muted">Describe your prediction task (target + clues) and get suggested models.</p>
-      <a class="btn" href="{{ url_for('main.data_get') }}">Open</a>
-    </div>
+<p class="muted">Pick your subject:</p>
+<div class="row">
+  <div class="card">
+    <h2>Basic Statistics</h2>
+    <p>Compute simple stats like mean.</p>
+    <a href="/basic"><button>Go to Basic</button></a>
   </div>
+  <div class="card">
+    <h2>Data</h2>
+    <p>Describe your problem and get model suggestions.</p>
+    <a href="/data"><button>Go to Data</button></a>
+  </div>
+</div>
+
+<div class="card">
+  <h3>Sanity</h3>
+  <button onclick="ping()">Ping /healthz</button>
+  <button onclick="echoLog()">Echo /api/log</button>
+  <div id="sanity" style="margin-top:12px;"></div>
+</div>
+
+<script>
+  async function ping() {
+    const r = await fetch('/healthz'); const j = await r.json();
+    document.getElementById('sanity').textContent = JSON.stringify(j);
+  }
+  async function echoLog() {
+    const r = await fetch('/api/log', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({message:'hello'})});
+    const j = await r.json();
+    document.getElementById('sanity').textContent = JSON.stringify(j);
+  }
+</script>
 {% endblock %}
