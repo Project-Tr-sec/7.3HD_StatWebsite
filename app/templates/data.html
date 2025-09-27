@@ -1,0 +1,28 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Suggest a Model</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  </head>
+  <body>
+    <h1>Data Study – Model Suggestor</h1>
+    <p>Describe your problem (e.g., “predicting sales next month with seasonality”):</p>
+    <textarea id="prompt" rows="5" cols="60" placeholder="predicting … + some clues"></textarea><br/>
+    <button id="go">Suggest Models</button>
+    <pre id="out"></pre>
+    <p><a href="{{ url_for('main.index') }}">← Back</a></p>
+    <script>
+      document.getElementById('go').onclick = async () => {
+        const prompt = document.getElementById('prompt').value;
+        const res = await fetch('/api/suggest', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({prompt})
+        });
+        const j = await res.json();
+        document.getElementById('out').textContent = JSON.stringify(j, null, 2);
+      };
+    </script>
+  </body>
+</html>

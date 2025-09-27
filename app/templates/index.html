@@ -1,0 +1,21 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Study Helper</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  </head>
+  <body>
+    <h1>What are you studying?</h1>
+    <div class="buttons">
+      <a class="btn" href="{{ url_for('main.page_basic') }}">Basic Statistics</a>
+      <a class="btn" href="{{ url_for('main.page_data') }}">Data (Suggest a Model)</a>
+    </div>
+    <p>Health: <code id="health">checking…</code></p>
+    <script>
+      fetch('/healthz').then(r=>r.json()).then(j=>{
+        document.getElementById('health').textContent = j.status
+      }).catch(()=>document.getElementById('health').textContent='error');
+    </script>
+  </body>
+</html>

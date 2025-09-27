@@ -6,4 +6,5 @@ flake8>=7.0
 isort>=5.13
 pip-audit>=2.7
 bandit>=1.7
-waitress>=3.0
+prometheus-client>=0.20
+Jinja2>=3.1

@@ -7,7 +7,7 @@ bp = Blueprint("main", __name__)
 # ---------- Pages ----------
 @bp.get("/")
 def index():
-    return render_template("index.html")  # in app/templates/
+    return render_template("index.html")
 
 @bp.get("/basic")
 def page_basic():

@@ -1,0 +1,29 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Basic Statistics</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  </head>
+  <body>
+    <h1>Basic Statistics</h1>
+    <p>Enter comma-separated numbers. We’ll compute the mean.</p>
+    <input id="nums" placeholder="e.g. 1, 2, 3.5, 10" style="width: 320px;" />
+    <button id="go">Compute Mean</button>
+    <pre id="out"></pre>
+    <p><a href="{{ url_for('main.index') }}">← Back</a></p>
+    <script>
+      document.getElementById('go').onclick = async () => {
+        const raw = document.getElementById('nums').value;
+        const numbers = raw.split(',').map(s=>s.trim()).filter(Boolean);
+        const res = await fetch('/api/stats/mean', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({numbers})
+        });
+        const j = await res.json();
+        document.getElementById('out').textContent = JSON.stringify(j, null, 2);
+      };
+    </script>
+  </body>
+</html>
