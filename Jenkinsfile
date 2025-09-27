@@ -22,11 +22,7 @@ pipeline {
       steps {
         bat '''
           call "%VENV_PATH%\\Scripts\\activate"
-          python - << "PY"
-from app import create_app
-app = create_app()
-print("factory OK:", app.name)
-PY
+          python -c "from app import create_app; app=create_app(); print('factory OK:', app.name)"
         '''
       }
     }
@@ -58,6 +54,9 @@ PY
   }
 
   post {
-    always { archiveArtifacts artifacts: 'pip_audit.json,bandit_report.json', allowEmptyArchive: true; cleanWs() }
+    always {
+      archiveArtifacts artifacts: 'pip_audit.json,bandit_report.json', allowEmptyArchive: true
+      cleanWs()
+    }
   }
 }
