@@ -35,23 +35,23 @@ pipeline {
     }
 
         stage('Build') {
-        steps {
-            bat """
-            call .venv\\Scripts\\activate
-            set PYTHONPATH=%CD%
-            python -c "import sys, os; print('cwd=', os.getcwd()); import app; print('import app OK', app.__file__)"
-            python -c "import flask, importlib.metadata as im; print('Flask OK:', im.version('flask'))"
-            """
-        }
-    }
-
-        stage('Unit and Integration Tests') {
             steps {
                 bat """
                 call .venv\\Scripts\\activate
                 set PYTHONPATH=%CD%
-                pytest -q --maxfail=1 --disable-warnings --cov=app
+                python -c "import sys, os; print('cwd=', os.getcwd()); import app; print('import app OK', app.__file__)"
+                python -c "import flask, importlib.metadata as im; print('Flask OK:', im.version('flask'))"
                 """
+            }
+    }
+
+        stage('Unit and Integration Tests') {
+            steps {
+                bat '''
+                    call .venv\\Scripts\\activate
+                    set PYTHONPATH=%CD%
+                    python -m pytest tests/ -v
+                '''
             }
     }
 
