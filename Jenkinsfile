@@ -4,12 +4,11 @@ pipeline {
   options {
     timestamps()
     buildDiscarder(logRotator(numToKeepStr: '20'))
-    // ansiColor('xterm')  <-- removed
   }
 
   triggers {
-    // Poll roughly every minute (use webhook if you can and remove this)
-    pollSCM('H/1 * * * *')
+
+    pollSCM('* * * * *')
   }
 
   environment {
@@ -35,24 +34,25 @@ pipeline {
       }
     }
 
-    stage('Build') {
-      steps {
-        bat """
-          call %VENV%\\Scripts\\activate
-          python -c "import sys; print('Python OK:', sys.version)"
-          python -c "import flask; print('Flask OK:', flask.__version__)"
-        """
-      }
+        stage('Build') {
+        steps {
+            bat """
+            call .venv\\Scripts\\activate
+            set PYTHONPATH=%CD%
+            python -c "import sys, os; print('cwd=', os.getcwd()); import app; print('import app OK', app.__file__)"
+            python -c "import flask, importlib.metadata as im; print('Flask OK:', im.version('flask'))"
+            """
+        }
     }
 
-    stage('Unit and Integration Tests') {
-      steps {
-        bat """
-          call %VENV%\\Scripts\\activate
-          pip install pytest pytest-cov
-          pytest -q --cov=app
-        """
-      }
+        stage('Unit and Integration Tests') {
+            steps {
+                bat """
+                call .venv\\Scripts\\activate
+                set PYTHONPATH=%CD%
+                pytest -q --maxfail=1 --disable-warnings --cov=app
+                """
+            }
     }
 
     stage('Code Analysis') {
