@@ -69,30 +69,38 @@ pipeline {
       steps {
         bat '''
           setlocal
-          set APP_DIR=%cd%
-          set VENV=%APP_DIR%\\.venv
+          set "APP_DIR=%cd%"
+          set "VENV=%APP_DIR%\\.venv"
 
           call "%VENV%\\Scripts\\activate"
           pip install -r requirements.txt
           pip install waitress
 
-          rem If service missing, install it with NSSM (nssm.exe must be on PATH)
-          sc query StatWebsite >NUL 2>&1
-          if %errorlevel% EQU 1060 (
-            echo Service StatWebsite not found. Installing with NSSM...
-            where nssm || (echo ERROR: nssm.exe not found on PATH & exit /b 1)
-            nssm install StatWebsite "%VENV%\\Scripts\\waitress-serve.exe" --host=0.0.0.0 --port=8000 wsgi:app
-            nssm set StatWebsite AppDirectory "%APP_DIR%"
-            nssm set StatWebsite Start SERVICE_AUTO_START
+          rem ---- Stop previously running instance if any (uses app.pid) ----
+          powershell -NoProfile -ExecutionPolicy Bypass ^
+            "if (Test-Path '%APP_DIR%\\app.pid') {" ^
+            "  try { $pid = Get-Content '%APP_DIR%\\app.pid'; if ($pid) { Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue } } catch {} ;" ^
+            "  Remove-Item '%APP_DIR%\\app.pid' -ErrorAction SilentlyContinue" ^
+            "}"
+
+          rem ---- Start new instance in background via PowerShell, capture PID ----
+          set "WAITRESS=%VENV%\\Scripts\\waitress-serve.exe"
+          if not exist "%WAITRESS%" (
+            echo ERROR: waitress-serve.exe not found && exit /b 1
           )
 
-          rem Restart (ignore stop failure if not running)
-          sc stop StatWebsite || echo "Service not running"
-          sc start StatWebsite
+          powershell -NoProfile -ExecutionPolicy Bypass ^
+            "$exe = '%WAITRESS%';" ^
+            "$args = '--host=0.0.0.0 --port=8000 wsgi:app';" ^
+            "$p = Start-Process -FilePath $exe -ArgumentList $args -WorkingDirectory '%APP_DIR%' -PassThru;" ^
+            "$p.Id | Out-File -FilePath '%APP_DIR%\\app.pid' -Encoding ascii;" ^
+            "Write-Host ('Started StatWebsite on port 8000 with PID ' + $p.Id)"
+
           endlocal
         '''
       }
     }
+
 
     stage('Integration Tests on Staging') {
       steps {
