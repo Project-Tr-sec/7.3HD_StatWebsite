@@ -4,8 +4,8 @@ pipeline {
   options { timestamps() }
 
   triggers {
-    githubPush()          
-    pollSCM('* * * * *')  
+    githubPush()              
+    pollSCM('H/5 * * * *')      
   }
 
   stages {
@@ -28,7 +28,7 @@ pipeline {
       steps {
         bat '''
           call .venv\\Scripts\\activate
-          python -c "import os, flask; import app; print('cwd=', os.getcwd()); print('import app OK', app.__file__); print('Flask OK:', flask.__version__)"
+          python -c "import os, importlib.metadata as im; import app; print('cwd=', os.getcwd()); print('import app OK', app.__file__); print('Flask OK:', im.version('flask'))"
         '''
       }
     }
@@ -57,6 +57,7 @@ pipeline {
       steps {
         bat '''
           call .venv\\Scripts\\activate
+          rem Create reports but do not fail the pipeline
           pip-audit -r requirements.txt --format cyclonedx --output sbom.json || echo "pip-audit found issues (non-fatal)"
           bandit -q -r . -f json -o bandit_report.json || echo "bandit found issues (non-fatal)"
           exit /b 0
@@ -65,24 +66,29 @@ pipeline {
     }
 
     stage('Deploy to Staging') {
-      steps { echo 'Pretend deploy to staging...' }
+      steps {
+        bat '''
+          call .venv\\Scripts\\activate
+          rem Ensure deps are up to date for the service environment
+          pip install -r requirements.txt
+
+          rem Restart the Windows service that runs waitress (pre-created as 'StatWebsite')
+          sc stop StatWebsite || echo "Service not running"
+          sc start StatWebsite
+        '''
+      }
     }
 
     stage('Integration Tests on Staging') {
-      steps { echo 'Pretend run integration tests on staging...' }
+      steps {
+        echo 'Pretend run integration tests on staging...'
+      }
     }
+  }
 
-  stage('Deploy to Staging') {
-    steps {
-      bat '''
-        call .venv\\Scripts\\activate
-        rem (optional) ensure deps are up-to-date on the host
-        pip install -r requirements.txt
-
-        rem restart the Windows service that runs waitress
-        sc stop StatWebsite || echo "Service not running"
-        sc start StatWebsite
-      '''
+  post {
+    always {
+      archiveArtifacts artifacts: 'bandit_report.json,sbom.json', allowEmptyArchive: true
     }
   }
 }
