@@ -72,8 +72,17 @@ pipeline {
       steps { echo 'Pretend run integration tests on staging...' }
     }
 
-    stage('Deploy to Production') {
-      steps { echo 'Pretend deploy to production...' }
+  stage('Deploy to Staging') {
+    steps {
+      bat '''
+        call .venv\\Scripts\\activate
+        rem (optional) ensure deps are up-to-date on the host
+        pip install -r requirements.txt
+
+        rem restart the Windows service that runs waitress
+        sc stop StatWebsite || echo "Service not running"
+        sc start StatWebsite
+      '''
     }
   }
 }
