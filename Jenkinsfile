@@ -33,17 +33,23 @@ pipeline {
 
     stage('Build (import sanity)') {
       steps {
-        bat """
-          "%PY%" - <<PYCODE
-import os, importlib.metadata as im
-import app
-print('cwd=', os.getcwd())
-print('import app OK', app.__file__)
-print('Flask OK:', im.version('flask'))
-PYCODE
-        """
+        powershell '''
+          $py = "$PWD\\.venv\\Scripts\\python.exe"
+          $code = @"
+    import os
+    import importlib.metadata as im
+    from app import create_app
+
+    app = create_app()
+    print("cwd=", os.getcwd())
+    print("app OK ->", app)
+    print("Flask version:", im.version("flask"))
+    "@
+          $code | & $py -
+        '''
       }
     }
+
 
     stage('Unit Tests') {
       steps {
