@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <h2>Basic Statistics</h2>
+  <form method="post" action="{{ url_for('main.basic_post') }}">
+    <label for="operation">Operation</label>
+    <select id="operation" name="operation">
+      <option value="sqrt">√x (square root)</option>
+      <option value="log">ln(x)</option>
+      <option value="mean">mean(numbers)</option>
+      <option value="var_sample">variance (sample)</option>
+      <option value="var_pop">variance (population)</option>
+    </select>
+
+    <label for="numbers">Input</label>
+    <textarea id="numbers" name="numbers" rows="3" placeholder="For √x or ln(x): enter a single number
+For mean/variance: enter numbers separated by space or comma">4</textarea>
+
+    <div style="margin-top:12px;">
+      <button class="btn" type="submit">Compute</button>
+    </div>
+  </form>
+
+  {% if error %}
+    <p class="error">{{ error }}</p>
+  {% endif %}
+  {% if result is not none %}
+    <hr/>
+    <p>Result: <span class="mono">{{ "%.6f"|format(result) if result is number else result }}</span></p>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="grid grid-2">
+    <div class="card">
+      <h2>Basic Statistics</h2>
+      <p class="muted">Quick calculator for √x, ln(x), mean, variance.</p>
+      <a class="btn" href="{{ url_for('main.basic_get') }}">Open</a>
+    </div>
+    <div class="card">
+      <h2>Data Study → Model Suggestions</h2>
+      <p class="muted">Describe your prediction task (target + clues) and get suggested models.</p>
+      <a class="btn" href="{{ url_for('main.data_get') }}">Open</a>
+    </div>
+  </div>
+{% endblock %}
