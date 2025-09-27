@@ -1,0 +1,15 @@
+# pyproject.toml
+[tool.black]
+line-length = 88
+exclude = '''
+/(
+  \.venv
+| build
+| dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 88
+skip = [".venv","build","dist"]

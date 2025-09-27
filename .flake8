@@ -1,14 +1,15 @@
 [flake8]
-exclude = 
+exclude =
     .venv,
     .git,
     __pycache__,
     build,
     dist
 max-line-length = 88
-ignore = 
-    E128,  # continuation line under-indented for visual indent
-    E501,  # line too long
-    F401,  # imported but unused
-    F403,  # 'from module import *' used; unable to detect undefined names
-    F405   # name may be undefined, or defined from star imports
+
+extend-ignore =
+    E128,
+    E501,
+    F401,
+    F403,
+    F405

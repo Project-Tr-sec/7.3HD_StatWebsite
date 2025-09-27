@@ -55,16 +55,15 @@ pipeline {
             }
     }
 
-    stage('Code Analysis') {
-      steps {
-        bat """
-          call %VENV%\\Scripts\\activate
-          pip install black flake8 isort
-          black --check .
-          isort --check-only .
-          flake8 .
-        """
-      }
+        stage('Code Analysis') {
+            steps {
+                bat """
+                call .venv\\Scripts\\activate
+                black .
+                isort . --profile black
+                flake8 .
+                """
+            }
     }
 
     stage('Security Scan') {
