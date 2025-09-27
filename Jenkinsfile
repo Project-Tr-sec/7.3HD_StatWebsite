@@ -4,22 +4,22 @@ pipeline {
   options {
     timestamps()
     buildDiscarder(logRotator(numToKeepStr: '20'))
-    ansiColor('xterm')
+    // ansiColor('xterm')  <-- removed
   }
 
   triggers {
+    // Poll roughly every minute (use webhook if you can and remove this)
     pollSCM('H/1 * * * *')
   }
 
   environment {
-    PY = 'python'         
+    PY = 'python'
     VENV = '.venv'
     STAGING_PORT = '5001'
     PROD_PORT = '5002'
   }
 
   stages {
-
     stage('Checkout') {
       steps { checkout scm }
     }
@@ -37,7 +37,6 @@ pipeline {
 
     stage('Build') {
       steps {
-        // For Python apps "build" usually just means "it installs and imports cleanly".
         bat """
           call %VENV%\\Scripts\\activate
           python -c "import sys; print('Python OK:', sys.version)"
@@ -53,12 +52,6 @@ pipeline {
           pip install pytest pytest-cov
           pytest -q --cov=app
         """
-      }
-      post {
-        always {
-          // If you later export JUnit XML, publish it here with `junit 'path/*.xml'`
-          echo 'Tests completed.'
-        }
       }
     }
 
@@ -105,15 +98,13 @@ pipeline {
     stage('Integration Tests on Staging') {
       steps {
         bat """
-          echo Basic smoke tests against staging...
           curl -fsS http://localhost:%STAGING_PORT%/healthz
-          REM add more curl tests for /api/calc if you want
         """
       }
     }
 
     stage('Deploy to Production') {
-      when { buildingTag() }  // only run when building a Git tag (e.g., v1.0.0)
+      when { buildingTag() }
       steps {
         bat """
           echo Stopping anything on port %PROD_PORT% (if running)...
@@ -128,15 +119,6 @@ pipeline {
           curl -fsS http://localhost:%PROD_PORT%/healthz
         """
       }
-    }
-  }
-
-  post {
-    success {
-      echo 'Pipeline finished successfully '
-    }
-    failure {
-      echo 'Pipeline failed  — check logs above.'
     }
   }
 }
