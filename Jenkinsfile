@@ -54,12 +54,14 @@ pipeline {
     }
 
     stage('Security Scan') {
-        steps {
-            bat '''
-            call .venv\\Scripts\\activate
-            bandit -r . -f json -o bandit_report.json || echo "Bandit scan completed"
-            '''
-        }
+      steps {
+        bat '''
+          call .venv\\Scripts\\activate
+          pip-audit -r requirements.txt --format cyclonedx --output sbom.json || echo "pip-audit found issues (non-fatal)"
+          bandit -q -r . -f json -o bandit_report.json || echo "bandit found issues (non-fatal)"
+          exit /b 0
+        '''
+      }
     }
 
     stage('Deploy to Staging') {
