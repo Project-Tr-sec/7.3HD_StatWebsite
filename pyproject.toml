@@ -1,4 +1,3 @@
-# pyproject.toml
 [tool.black]
 line-length = 88
 exclude = '''
@@ -6,10 +5,15 @@ exclude = '''
   \.venv
 | build
 | dist
+| \.git
 )/
 '''
 
 [tool.isort]
 profile = "black"
 line_length = 88
-skip = [".venv","build","dist"]
+skip = [".venv","build","dist",".git"]
+
+[tool.pytest.ini_options]
+addopts = "-q --disable-warnings"
+testpaths = ["tests"]

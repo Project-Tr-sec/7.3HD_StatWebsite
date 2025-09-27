@@ -1,9 +1,15 @@
-import math
-import pytest
-from app.math_core import log, sqrt
+from __future__ import annotations
 
-def test_log_e_is_one():
-    assert abs(log(math.e) - 1.0) < 1e-12
+from app.math_core import log_e, sqrt
+
 
 def test_sqrt_four_is_two():
     assert sqrt(4) == 2
+
+
+def test_log_e_is_one():
+    assert log_e(math_e()) == 1
+
+
+def math_e() -> float:
+    return 2.718281828459045

@@ -1,30 +1,16 @@
-"""
-Math Core Application Package
-"""
+from __future__ import annotations
+
 from flask import Flask
 
 
-def create_app():
-    """Create and configure the Flask application."""
+def create_app() -> Flask:
+    """Flask application factory."""
     app = Flask(__name__)
-    app.config["JSON_SORT_KEYS"] = False
 
-    # Import routes only inside the factory to avoid circulars
     from .routes import bp as main_bp
+
     app.register_blueprint(main_bp)
 
     return app
 
-
-from .math_core import log, sqrt, add, subtract, multiply, divide
-
-from .routes import bp 
-__all__ = [
-    'create_app', 
-    'log', 
-    'sqrt', 
-    'add', 
-    'subtract', 
-    'multiply', 
-    'divide'
-]
+app = create_app()
