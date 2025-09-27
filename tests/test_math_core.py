@@ -1,5 +1,5 @@
 import math
-from app import math_core as mc
+import app.math_core as mc 
 
 def test_log_e_is_one():
     assert abs(mc.log(math.e) - 1.0) < 1e-12
