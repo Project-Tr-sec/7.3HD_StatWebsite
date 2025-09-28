@@ -4,7 +4,6 @@ pipeline {
   options {
     timestamps()
     timeout(time: 30, unit: 'MINUTES')
-    ansiColor('xterm')
   }
 
   triggers {
@@ -16,18 +15,17 @@ pipeline {
     PY       = "${WORKSPACE}\\.venv\\Scripts\\python.exe"
     PIP      = "${WORKSPACE}\\.venv\\Scripts\\pip.exe"
 
-    SONAR_HOST_URL = credentials('sonar-host-url')         
-    SONAR_TOKEN    = credentials('sonar-token')            
-    VERCEL_TOKEN   = credentials('vercel-token')           
-    GH_TOKEN       = credentials('github-token')            
-    MONITOR_URL    = ''                                   
+    SONAR_HOST_URL = credentials('sonar-host-url')
+    SONAR_TOKEN    = credentials('sonar-token')
+    VERCEL_TOKEN   = credentials('vercel-token')
+    GH_TOKEN       = credentials('github-token')
+    MONITOR_URL    = ''
     APP_NAME       = 'statwebsite'
     BUILD_ARTIFACT = "build\\${APP_NAME}-${env.BUILD_NUMBER}.zip"
     DOCKER_IMAGE   = "ghcr.io/your-org/${APP_NAME}:${env.BUILD_NUMBER}"
   }
 
   stages {
-
     stage('Checkout') {
       steps {
         checkout scm
@@ -45,8 +43,7 @@ pipeline {
       }
     }
 
-    stage('Build') {
-
+    stage('Build (artefact)') {
       steps {
         powershell '''
           $py = "$PWD\\.venv\\Scripts\\python.exe"
@@ -62,11 +59,16 @@ except Exception as e:
 "@
           $code | & $py -
         '''
-        bat """
-          powershell -NoProfile -Command ^
-            Compress-Archive -Path * -DestinationPath "%BUILD_ARTIFACT%" -Force -CompressionLevel Optimal -Verbose ^
-            -ExcludeObject .venv,'**\\.venv\\**','.git','**\\.git\\**','build','**\\build\\**'
-        """
+
+        powershell '''
+          if (!(Test-Path build)) { New-Item -ItemType Directory -Path build | Out-Null }
+          $dest = "$env:BUILD_ARTIFACT"
+          if (Test-Path $dest) { Remove-Item $dest -Force }
+          $items = Get-ChildItem -Force | Where-Object {
+            $_.Name -notin @('.venv','.git','build') -and $_.Name -ne '.gitignore'
+          }
+          Compress-Archive -Path $items -DestinationPath $dest -CompressionLevel Optimal
+        '''
         archiveArtifacts artifacts: 'build/*.zip', fingerprint: true
       }
     }
@@ -86,7 +88,7 @@ except Exception as e:
       }
     }
 
-    stage('Code Quality Analysis') {
+    stage('Code Quality') {
       steps {
         bat """
           "%PY%" -m pip install black isort flake8
@@ -96,18 +98,16 @@ except Exception as e:
         """
         script {
           if (env.SONAR_HOST_URL && env.SONAR_TOKEN) {
-            withEnv(["SONAR_SCANNER_OPTS=-Xmx1024m"]) {
-              bat """
-                sonar-scanner ^
-                  -Dsonar.host.url=%SONAR_HOST_URL% ^
-                  -Dsonar.login=%SONAR_TOKEN% ^
-                  -Dsonar.projectKey=${env.APP_NAME} ^
-                  -Dsonar.projectBaseDir=%WORKSPACE% ^
-                  -Dsonar.sources=.
-              """
-            }
+            bat """
+              sonar-scanner ^
+                -Dsonar.host.url=%SONAR_HOST_URL% ^
+                -Dsonar.login=%SONAR_TOKEN% ^
+                -Dsonar.projectKey=${env.APP_NAME} ^
+                -Dsonar.projectBaseDir=%WORKSPACE% ^
+                -Dsonar.sources=.
+            """
           } else {
-            echo 'Sonar not configured; skipped (still satisfies code-quality with linters).'
+            echo 'Sonar not configured; skipped.'
           }
         }
       }
@@ -144,7 +144,7 @@ except Exception as e:
       }
     }
 
-    stage('Release') {
+    stage('Release (Promotion)') {
       when { branch 'main' }
       steps {
         bat """
@@ -169,7 +169,7 @@ except Exception as e:
       }
     }
 
-    stage('Monitoring & Alerting') {
+    stage('Monitoring & Alerting (Smoke)') {
       steps {
         script {
           if (env.MONITOR_URL?.trim()) {
@@ -177,17 +177,14 @@ except Exception as e:
               powershell -NoProfile -Command ^
                 try { ^
                   $resp = Invoke-WebRequest -UseBasicParsing "%MONITOR_URL%"; ^
-                  $code = $resp.StatusCode; ^
-                  if ($code -ge 200 -and $code -lt 400) { ^
-                    Write-Host "Health OK: $code"; ^
-                    Set-Content -Path health.json -Value (@{status=$code;time=Get-Date}|ConvertTo-Json) ^
+                  if ($resp.StatusCode -ge 200 -and $resp.StatusCode -lt 400) { ^
+                    Set-Content -Path health.json -Value (@{status=$($resp.StatusCode);time=Get-Date}|ConvertTo-Json) ^
                   } else { ^
-                    Write-Error "Health NOT OK: $code"; exit 1 ^
+                    Write-Error "Health NOT OK: $($resp.StatusCode)"; exit 1 ^
                   } ^
                 } catch { Write-Error $_; exit 1 }
             """
           } else {
-            echo 'MONITOR_URL not set; recording placeholder monitoring output.'
             writeFile file: 'health.json', text: '{"status":"skipped","reason":"MONITOR_URL not set"}'
           }
         }
@@ -201,7 +198,7 @@ except Exception as e:
   }
 
   post {
-    success { echo 'Pipeline finish' }
+    success { echo 'Pipeline finished' }
     failure { echo 'Pipeline failed — check the stage logs above.' }
     always  { echo "Build artefact (if created): ${env.BUILD_ARTIFACT}" }
   }
