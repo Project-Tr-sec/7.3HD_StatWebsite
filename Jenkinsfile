@@ -175,14 +175,14 @@ except Exception as e:
           if (env.MONITOR_URL?.trim()) {
             bat """
               powershell -NoProfile -Command ^
-                try { ^
-                  $resp = Invoke-WebRequest -UseBasicParsing "%MONITOR_URL%"; ^
+                "try { ^
+                  $resp = Invoke-WebRequest -UseBasicParsing '%MONITOR_URL%'; ^
                   if ($resp.StatusCode -ge 200 -and $resp.StatusCode -lt 400) { ^
                     Set-Content -Path health.json -Value (@{status=$($resp.StatusCode);time=Get-Date}|ConvertTo-Json) ^
                   } else { ^
-                    Write-Error "Health NOT OK: $($resp.StatusCode)"; exit 1 ^
+                    Write-Error 'Health NOT OK: $($resp.StatusCode)'; exit 1 ^
                   } ^
-                } catch { Write-Error $_; exit 1 }
+                } catch { Write-Error $_; exit 1 }"
             """
           } else {
             writeFile file: 'health.json', text: '{"status":"skipped","reason":"MONITOR_URL not set"}'
