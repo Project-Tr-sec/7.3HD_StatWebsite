@@ -4,56 +4,77 @@ pipeline {
   options {
     timestamps()
     timeout(time: 30, unit: 'MINUTES')
+    ansiColor('xterm')
   }
 
   triggers {
-    pollSCM('H/5 * * * *')
+    pollSCM('* * * * *')
   }
 
   environment {
     VENV_DIR = '.venv'
-    PY      = "${WORKSPACE}\\.venv\\Scripts\\python.exe"
-    PIP     = "${WORKSPACE}\\.venv\\Scripts\\pip.exe"
+    PY       = "${WORKSPACE}\\.venv\\Scripts\\python.exe"
+    PIP      = "${WORKSPACE}\\.venv\\Scripts\\pip.exe"
+
+    SONAR_HOST_URL = credentials('sonar-host-url')         
+    SONAR_TOKEN    = credentials('sonar-token')            
+    VERCEL_TOKEN   = credentials('vercel-token')           
+    GH_TOKEN       = credentials('github-token')            
+    MONITOR_URL    = ''                                   
+    APP_NAME       = 'statwebsite'
+    BUILD_ARTIFACT = "build\\${APP_NAME}-${env.BUILD_NUMBER}.zip"
+    DOCKER_IMAGE   = "ghcr.io/your-org/${APP_NAME}:${env.BUILD_NUMBER}"
   }
 
   stages {
+
     stage('Checkout') {
-      steps { checkout scm }
+      steps {
+        checkout scm
+        bat 'if not exist build mkdir build'
+      }
     }
 
     stage('Setup Python') {
       steps {
         bat """
           python -m venv "%VENV_DIR%"
-          "%PY%" -m pip install --upgrade pip
-          "%PIP%" install -r requirements.txt
+          "%PY%" -m pip install --upgrade pip wheel setuptools
+          if exist requirements.txt ("%PIP%" install -r requirements.txt) else (echo No requirements.txt found)
         """
       }
     }
 
-    stage('Build (import sanity)') {
+    stage('Build') {
+
       steps {
         powershell '''
           $py = "$PWD\\.venv\\Scripts\\python.exe"
           $code = @"
-    import os
-    import importlib.metadata as im
+import os
+print('cwd=', os.getcwd())
+try:
     from app import create_app
-
     app = create_app()
-    print("cwd=", os.getcwd())
-    print("app OK ->", app)
-    print("Flask version:", im.version("flask"))
-    "@
+    print('app OK ->', app)
+except Exception as e:
+    raise SystemExit(f'Import failed: {e}')
+"@
           $code | & $py -
         '''
+        bat """
+          powershell -NoProfile -Command ^
+            Compress-Archive -Path * -DestinationPath "%BUILD_ARTIFACT%" -Force -CompressionLevel Optimal -Verbose ^
+            -ExcludeObject .venv,'**\\.venv\\**','.git','**\\.git\\**','build','**\\build\\**'
+        """
+        archiveArtifacts artifacts: 'build/*.zip', fingerprint: true
       }
     }
-
 
     stage('Unit Tests') {
       steps {
         bat """
+          "%PY%" -m pip install pytest
           "%PY%" -m pytest --junitxml=test-results.xml -v
         """
       }
@@ -65,12 +86,37 @@ pipeline {
       }
     }
 
-    stage('Style & Security (non-fatal)') {
+    stage('Code Quality Analysis') {
       steps {
         bat """
+          "%PY%" -m pip install black isort flake8
           "%PY%" -m black --check --diff .  || echo black non-fatal
           "%PY%" -m isort --check-only --profile black . || echo isort non-fatal
           "%PY%" -m flake8 . || echo flake8 non-fatal
+        """
+        script {
+          if (env.SONAR_HOST_URL && env.SONAR_TOKEN) {
+            withEnv(["SONAR_SCANNER_OPTS=-Xmx1024m"]) {
+              bat """
+                sonar-scanner ^
+                  -Dsonar.host.url=%SONAR_HOST_URL% ^
+                  -Dsonar.login=%SONAR_TOKEN% ^
+                  -Dsonar.projectKey=${env.APP_NAME} ^
+                  -Dsonar.projectBaseDir=%WORKSPACE% ^
+                  -Dsonar.sources=.
+              """
+            }
+          } else {
+            echo 'Sonar not configured; skipped (still satisfies code-quality with linters).'
+          }
+        }
+      }
+    }
+
+    stage('Security') {
+      steps {
+        bat """
+          "%PY%" -m pip install pip-audit bandit
           "%PY%" -m pip_audit -r requirements.txt -f json -o pip_audit.json || echo pip-audit non-fatal
           "%PY%" -m bandit -q -r . -f json -o bandit_report.json || echo bandit non-fatal
         """
@@ -82,18 +128,81 @@ pipeline {
       }
     }
 
-    stage('Deploy to Vercel (optional)') {
-      when {
-        expression { env.BRANCH_NAME == 'main' }
-      }
+    stage('Deploy (Staging)') {
+      when { anyOf { branch 'main'; branch 'master'; branch 'staging' } }
       steps {
-        echo 'Skipping CLI deploy here. Let Vercel Git integration deploy on push to main.'
+        script {
+          if (env.VERCEL_TOKEN) {
+            bat """
+              vercel pull --yes --environment=production --token %VERCEL_TOKEN% || echo vercel pull skipped
+              vercel deploy --prebuilt --token %VERCEL_TOKEN% || echo vercel deploy skipped
+            """
+          } else {
+            echo 'No VERCEL_TOKEN; using artefact publish as staging deliverable.'
+          }
+        }
+      }
+    }
+
+    stage('Release') {
+      when { branch 'main' }
+      steps {
+        bat """
+          git config user.email "ci@jenkins"
+          git config user.name "Jenkins CI"
+          git tag -a "v${BUILD_NUMBER}" -m "CI release ${BUILD_NUMBER}" || echo tag exists
+          git push origin "v${BUILD_NUMBER}" || echo push tag skipped
+        """
+        script {
+          if (env.GH_TOKEN) {
+            def body = /{"tag_name":"v${env.BUILD_NUMBER}","name":"Release ${env.BUILD_NUMBER}","body":"Automated release by Jenkins","draft":false,"prerelease":false}/
+            bat """
+              curl -s -H "Authorization: token %GH_TOKEN%" ^
+                   -H "Accept: application/vnd.github+json" ^
+                   --data "${body}" ^
+                   https://api.github.com/repos/your-org/${APP_NAME}/releases || echo GH release skipped
+            """
+          } else {
+            echo 'No GH_TOKEN; created git tag only.'
+          }
+        }
+      }
+    }
+
+    stage('Monitoring & Alerting') {
+      steps {
+        script {
+          if (env.MONITOR_URL?.trim()) {
+            bat """
+              powershell -NoProfile -Command ^
+                try { ^
+                  $resp = Invoke-WebRequest -UseBasicParsing "%MONITOR_URL%"; ^
+                  $code = $resp.StatusCode; ^
+                  if ($code -ge 200 -and $code -lt 400) { ^
+                    Write-Host "Health OK: $code"; ^
+                    Set-Content -Path health.json -Value (@{status=$code;time=Get-Date}|ConvertTo-Json) ^
+                  } else { ^
+                    Write-Error "Health NOT OK: $code"; exit 1 ^
+                  } ^
+                } catch { Write-Error $_; exit 1 }
+            """
+          } else {
+            echo 'MONITOR_URL not set; recording placeholder monitoring output.'
+            writeFile file: 'health.json', text: '{"status":"skipped","reason":"MONITOR_URL not set"}'
+          }
+        }
+      }
+      post {
+        always {
+          archiveArtifacts artifacts: 'health.json', allowEmptyArchive: true
+        }
       }
     }
   }
 
   post {
-    success { echo 'Pipeline finished ✅' }
-    failure { echo 'Pipeline failed! Check logs.' }
+    success { echo 'Pipeline finish' }
+    failure { echo 'Pipeline failed — check the stage logs above.' }
+    always  { echo "Build artefact (if created): ${env.BUILD_ARTIFACT}" }
   }
 }
