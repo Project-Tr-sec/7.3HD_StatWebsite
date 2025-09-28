@@ -113,12 +113,20 @@ pipeline {
 
     stage('Security') {
       steps {
-        // Non-fatal security scans; always archive if present
-        bat """
-          "%PY%" -m pip install pip-audit bandit
-          "%PY%" -m pip_audit -r requirements.txt -f json -o pip_audit.json || echo pip-audit non-fatal
-          "%PY%" -m bandit -q -r . -f json -o bandit_report.json || echo bandit non-fatal
-        """
+        powershell '''
+          $ErrorActionPreference = "Continue"
+
+          & "$env:PY" -m pip install pip-audit bandit | Out-Null
+
+          & "$env:PY" -m pip_audit -r requirements.txt -f json -o pip_audit.json
+          $pa = $LASTEXITCODE
+          if ($pa -ne 0) { Write-Host "pip-audit non-fatal (exit $pa)" }
+
+          & "$env:PY" -m bandit -q -r . -f json -o bandit_report.json
+          $bd = $LASTEXITCODE
+          if ($bd -ne 0) { Write-Host "bandit non-fatal (exit $bd)" }
+          exit 0
+        '''
       }
       post {
         always {
@@ -126,6 +134,7 @@ pipeline {
         }
       }
     }
+
 
     stage('Deploy (Staging)') {
       // Keep the stage, but make it no-op unless you wire an actual deploy later
