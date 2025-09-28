@@ -91,13 +91,23 @@ pipeline {
 
     stage('Code Quality') {
       steps {
-        // Non-fatal linters; always pass the stage
-        bat """
-          "%PY%" -m pip install black isort flake8
-          "%PY%" -m black --check --diff .  || echo black non-fatal
-          "%PY%" -m isort --check-only --profile black . || echo isort non-fatal
-          "%PY%" -m flake8 . || echo flake8 non-fatal
-        """
+        powershell '''
+          $ErrorActionPreference = "Continue"
+
+          & "$env:PY" -m pip install black isort flake8 | Out-Null
+
+          & "$env:PY" -m black --check --diff . ; $black = $LASTEXITCODE
+          if ($black -ne 0) { Write-Host "black non-fatal (exit $black)" }
+
+          & "$env:PY" -m isort --check-only --profile black . ; $isort = $LASTEXITCODE
+          if ($isort -ne 0) { Write-Host "isort non-fatal (exit $isort)" }
+
+          & "$env:PY" -m flake8 . ; $flake = $LASTEXITCODE
+          if ($flake -ne 0) { Write-Host "flake8 non-fatal (exit $flake)" }
+
+          # Always succeed for assessment:
+          exit 0
+        '''
       }
     }
 
