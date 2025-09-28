@@ -15,14 +15,16 @@ pipeline {
     PY       = "${WORKSPACE}\\.venv\\Scripts\\python.exe"
     PIP      = "${WORKSPACE}\\.venv\\Scripts\\pip.exe"
 
-    SONAR_HOST_URL = credentials('sonar-host-url')
-    SONAR_TOKEN    = credentials('sonar-token')
-    VERCEL_TOKEN   = credentials('vercel-token')
-    GH_TOKEN       = credentials('github-token')
+    // Use safer credential handling
+    SONAR_HOST_URL = credentials('sonar-host-url') { optional: true }
+    SONAR_TOKEN    = credentials('sonar-token') { optional: true }
+    VERCEL_TOKEN   = credentials('vercel-token') { optional: true }
+    GH_TOKEN       = credentials('github-token') { optional: true }
     MONITOR_URL    = ''
     APP_NAME       = 'statwebsite'
-    BUILD_ARTIFACT = "build\\${APP_NAME}-${env.BUILD_NUMBER}.zip"
-    DOCKER_IMAGE   = "ghcr.io/your-org/${APP_NAME}:${env.BUILD_NUMBER}"
+    // Fix environment variable reference
+    BUILD_ARTIFACT = "build\\${APP_NAME}-${BUILD_NUMBER}.zip"
+    DOCKER_IMAGE   = "ghcr.io/your-org/${APP_NAME}:${BUILD_NUMBER}"
   }
 
   stages {
@@ -62,7 +64,7 @@ except Exception as e:
 
         powershell '''
           if (!(Test-Path build)) { New-Item -ItemType Directory -Path build | Out-Null }
-          $dest = "$env:BUILD_ARTIFACT"
+          $dest = "build\\statwebsite-${env:BUILD_NUMBER}.zip"
           if (Test-Path $dest) { Remove-Item $dest -Force }
           $items = Get-ChildItem -Force | Where-Object {
             $_.Name -notin @('.venv','.git','build') -and $_.Name -ne '.gitignore'
@@ -97,12 +99,13 @@ except Exception as e:
           "%PY%" -m flake8 . || echo flake8 non-fatal
         """
         script {
-          if (env.SONAR_HOST_URL && env.SONAR_TOKEN) {
+          // Safer credential checking
+          if (env.SONAR_HOST_URL && env.SONAR_HOST_URL != 'sonar-host-url' && env.SONAR_TOKEN && env.SONAR_TOKEN != 'sonar-token') {
             bat """
               sonar-scanner ^
                 -Dsonar.host.url=%SONAR_HOST_URL% ^
                 -Dsonar.login=%SONAR_TOKEN% ^
-                -Dsonar.projectKey=${env.APP_NAME} ^
+                -Dsonar.projectKey=${APP_NAME} ^
                 -Dsonar.projectBaseDir=%WORKSPACE% ^
                 -Dsonar.sources=.
             """
@@ -132,7 +135,8 @@ except Exception as e:
       when { anyOf { branch 'main'; branch 'master'; branch 'staging' } }
       steps {
         script {
-          if (env.VERCEL_TOKEN) {
+          // Safer credential checking
+          if (env.VERCEL_TOKEN && env.VERCEL_TOKEN != 'vercel-token') {
             bat """
               vercel pull --yes --environment=production --token %VERCEL_TOKEN% || echo vercel pull skipped
               vercel deploy --prebuilt --token %VERCEL_TOKEN% || echo vercel deploy skipped
@@ -154,8 +158,9 @@ except Exception as e:
           git push origin "v${BUILD_NUMBER}" || echo push tag skipped
         """
         script {
-          if (env.GH_TOKEN) {
-            def body = /{"tag_name":"v${env.BUILD_NUMBER}","name":"Release ${env.BUILD_NUMBER}","body":"Automated release by Jenkins","draft":false,"prerelease":false}/
+          // Safer credential checking
+          if (env.GH_TOKEN && env.GH_TOKEN != 'github-token') {
+            def body = "{\"tag_name\":\"v${BUILD_NUMBER}\",\"name\":\"Release ${BUILD_NUMBER}\",\"body\":\"Automated release by Jenkins\",\"draft\":false,\"prerelease\":false}"
             bat """
               curl -s -H "Authorization: token %GH_TOKEN%" ^
                    -H "Accept: application/vnd.github+json" ^
@@ -207,6 +212,11 @@ except Exception as e:
   post {
     success { echo 'Pipeline finished' }
     failure { echo 'Pipeline failed — check the stage logs above.' }
-    always  { echo "Build artefact (if created): ${env.BUILD_ARTIFACT}" }
+    always  { 
+      script {
+        def artifactPath = "build\\${APP_NAME}-${BUILD_NUMBER}.zip"
+        echo "Build artefact (if created): ${artifactPath}"
+      }
+    }
   }
 }
