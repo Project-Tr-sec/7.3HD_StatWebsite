@@ -15,16 +15,10 @@ pipeline {
     PY       = "${WORKSPACE}\\.venv\\Scripts\\python.exe"
     PIP      = "${WORKSPACE}\\.venv\\Scripts\\pip.exe"
 
-    // Use safer credential handling
-    SONAR_HOST_URL = credentials('sonar-host-url') { optional: true }
-    SONAR_TOKEN    = credentials('sonar-token') { optional: true }
-    VERCEL_TOKEN   = credentials('vercel-token') { optional: true }
-    GH_TOKEN       = credentials('github-token') { optional: true }
-    MONITOR_URL    = ''
     APP_NAME       = 'statwebsite'
-    // Fix environment variable reference
-    BUILD_ARTIFACT = "build\\${APP_NAME}-${BUILD_NUMBER}.zip"
-    DOCKER_IMAGE   = "ghcr.io/your-org/${APP_NAME}:${BUILD_NUMBER}"
+    BUILD_ARTIFACT = "build\\${APP_NAME}-${env.BUILD_NUMBER}.zip"
+    DOCKER_IMAGE   = "ghcr.io/your-org/${APP_NAME}:${env.BUILD_NUMBER}"
+    MONITOR_URL    = ''
   }
 
   stages {
@@ -62,15 +56,15 @@ except Exception as e:
           $code | & $py -
         '''
 
-        powershell '''
+        powershell """
           if (!(Test-Path build)) { New-Item -ItemType Directory -Path build | Out-Null }
-          $dest = "build\\statwebsite-${env:BUILD_NUMBER}.zip"
-          if (Test-Path $dest) { Remove-Item $dest -Force }
-          $items = Get-ChildItem -Force | Where-Object {
-            $_.Name -notin @('.venv','.git','build') -and $_.Name -ne '.gitignore'
+          `$dest = "build\\statwebsite-${env.BUILD_NUMBER}.zip"
+          if (Test-Path `$dest) { Remove-Item `$dest -Force }
+          `$items = Get-ChildItem -Force | Where-Object {
+            `$_.Name -notin @('.venv','.git','build') -and `$_.Name -ne '.gitignore'
           }
-          Compress-Archive -Path $items -DestinationPath $dest -CompressionLevel Optimal
-        '''
+          Compress-Archive -Path `$items -DestinationPath `$dest -CompressionLevel Optimal
+        """
         archiveArtifacts artifacts: 'build/*.zip', fingerprint: true
       }
     }
@@ -99,17 +93,19 @@ except Exception as e:
           "%PY%" -m flake8 . || echo flake8 non-fatal
         """
         script {
-          // Safer credential checking
-          if (env.SONAR_HOST_URL && env.SONAR_HOST_URL != 'sonar-host-url' && env.SONAR_TOKEN && env.SONAR_TOKEN != 'sonar-token') {
-            bat """
-              sonar-scanner ^
-                -Dsonar.host.url=%SONAR_HOST_URL% ^
-                -Dsonar.login=%SONAR_TOKEN% ^
-                -Dsonar.projectKey=${APP_NAME} ^
-                -Dsonar.projectBaseDir=%WORKSPACE% ^
-                -Dsonar.sources=.
-            """
-          } else {
+          try {
+            withCredentials([string(credentialsId: 'sonar-host-url', variable: 'SONAR_HOST_URL'), 
+                           string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
+              bat """
+                sonar-scanner ^
+                  -Dsonar.host.url=%SONAR_HOST_URL% ^
+                  -Dsonar.login=%SONAR_TOKEN% ^
+                  -Dsonar.projectKey=${env.APP_NAME} ^
+                  -Dsonar.projectBaseDir=%WORKSPACE% ^
+                  -Dsonar.sources=.
+              """
+            }
+          } catch (Exception e) {
             echo 'Sonar not configured; skipped.'
           }
         }
@@ -135,13 +131,14 @@ except Exception as e:
       when { anyOf { branch 'main'; branch 'master'; branch 'staging' } }
       steps {
         script {
-          // Safer credential checking
-          if (env.VERCEL_TOKEN && env.VERCEL_TOKEN != 'vercel-token') {
-            bat """
-              vercel pull --yes --environment=production --token %VERCEL_TOKEN% || echo vercel pull skipped
-              vercel deploy --prebuilt --token %VERCEL_TOKEN% || echo vercel deploy skipped
-            """
-          } else {
+          try {
+            withCredentials([string(credentialsId: 'vercel-token', variable: 'VERCEL_TOKEN')]) {
+              bat """
+                vercel pull --yes --environment=production --token %VERCEL_TOKEN% || echo vercel pull skipped
+                vercel deploy --prebuilt --token %VERCEL_TOKEN% || echo vercel deploy skipped
+              """
+            }
+          } catch (Exception e) {
             echo 'No VERCEL_TOKEN; using artefact publish as staging deliverable.'
           }
         }
@@ -154,20 +151,21 @@ except Exception as e:
         bat """
           git config user.email "ci@jenkins"
           git config user.name "Jenkins CI"
-          git tag -a "v${BUILD_NUMBER}" -m "CI release ${BUILD_NUMBER}" || echo tag exists
-          git push origin "v${BUILD_NUMBER}" || echo push tag skipped
+          git tag -a "v${env.BUILD_NUMBER}" -m "CI release ${env.BUILD_NUMBER}" || echo tag exists
+          git push origin "v${env.BUILD_NUMBER}" || echo push tag skipped
         """
         script {
-          // Safer credential checking
-          if (env.GH_TOKEN && env.GH_TOKEN != 'github-token') {
-            def body = "{\"tag_name\":\"v${BUILD_NUMBER}\",\"name\":\"Release ${BUILD_NUMBER}\",\"body\":\"Automated release by Jenkins\",\"draft\":false,\"prerelease\":false}"
-            bat """
-              curl -s -H "Authorization: token %GH_TOKEN%" ^
-                   -H "Accept: application/vnd.github+json" ^
-                   --data "${body}" ^
-                   https://api.github.com/repos/your-org/${APP_NAME}/releases || echo GH release skipped
-            """
-          } else {
+          try {
+            withCredentials([string(credentialsId: 'github-token', variable: 'GH_TOKEN')]) {
+              def body = "{\"tag_name\":\"v${env.BUILD_NUMBER}\",\"name\":\"Release ${env.BUILD_NUMBER}\",\"body\":\"Automated release by Jenkins\",\"draft\":false,\"prerelease\":false}"
+              bat """
+                curl -s -H "Authorization: token %GH_TOKEN%" ^
+                     -H "Accept: application/vnd.github+json" ^
+                     --data "${body}" ^
+                     https://api.github.com/repos/your-org/${env.APP_NAME}/releases || echo GH release skipped
+              """
+            }
+          } catch (Exception e) {
             echo 'No GH_TOKEN; created git tag only.'
           }
         }
@@ -213,10 +211,7 @@ except Exception as e:
     success { echo 'Pipeline finished' }
     failure { echo 'Pipeline failed — check the stage logs above.' }
     always  { 
-      script {
-        def artifactPath = "build\\${APP_NAME}-${BUILD_NUMBER}.zip"
-        echo "Build artefact (if created): ${artifactPath}"
-      }
+      echo "Build artefact (if created): ${env.BUILD_ARTIFACT}"
     }
   }
 }
